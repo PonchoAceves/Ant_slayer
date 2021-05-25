@@ -37,6 +37,7 @@ vignettes/*.pdf
 
 # Obsolete versions 
 Local data/
+gg_plots/
 
 # R notebook files created by R markdown
 *.nb.html
