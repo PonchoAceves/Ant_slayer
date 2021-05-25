@@ -11,3 +11,5 @@ Alfonso Aceves-Aparicio\*^1, 2^, Ajay Narendra^1^, Donald James McLean^1^, Eliz
 Corresponding author: Alfonso Aceves-Aparicio Correspondence: [bioarach\@gmail.com](mailto:bioarach@gmail.com)
 
 This is the code used to extract velocity data and generate figures from the attack sequences recorded as high speed video.
+
+Glance at the full code and outcomes [here] (https://ponchoaceves.github.io/Ant_slayer/ms.html)
