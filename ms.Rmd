@@ -1,0 +1,596 @@
+---
+title: "Ant Slayer"
+output:
+  html_document:
+    code_folding: "hide"
+    toc: TRUE
+    toc_float: TRUE
+    df_print: paged
+    code_download: true
+  html_notebook: 
+    toc: yes
+    toc_float: yes
+editor_options:
+  chunk_output_type: inline
+  markdown: 
+    wrap: sentence
+---
+
+# Fast acrobatic maneuvers enable arboreal spiders to hunt dangerous prey
+
+**Authors:**
+
+Alfonso Aceves-Aparicio\*^1, 2^, Ajay Narendra^1^, Donald James McLean^1^, Elizabeth C. Lowe^1^, Marcelo Christian^2^, Jonas O. Wolff^1^, Jutta M. Schneider^2^ and Marie E. Herberstein^1^
+
+1, Department of Biological Sciences, Macquarie University, Sydney, NSW, 2109, Australia
+
+2, Institute of Zoology, Universität Hamburg, Hamburg, Germany Corresponding author: Alfonso Aceves-Aparicio Correspondence: [bioarach\@gmail.com](mailto:bioarach@gmail.com){.email}
+
+This is the code used to extract velocity data and generate figures from the attack sequences recorded as high speed video.
+
+```{r message=FALSE, warning=FALSE}
+library(trajr)
+library(tidyverse)
+library(readxl)
+library(kableExtra)
+library(patchwork)
+library(plotrix)
+library(sjPlot)
+
+source("./R/functions.R")
+
+```
+
+## Data description {.tabset .tabset-fade .tabset-pills}
+
+Each high speed video was inspected in matlab to track the movement of the ant approaching the ant-slayer spider and the first phase of the capture.
+Here we have processed the movement of the spiders abdomen during the captures, as this engages earlier during the capture sequence.
+From each recorded high speed video, a file containing the cartesian coordinates was generated.
+Each coordinates file is accompanied by a scale file including the coordinates for a known distance.
+This distance is included in the name of the scale file.
+
+The video sequences were visually scored to identify the precise start of each stage during the strike phase.
+This information is stored in a spreadsheet containing the video ID, and the frame number for the onset of each stage.
+
+Frames and stage's description: frame1, first spider movements breaking the "sit and wait" position.
+frame2, deploying and directing silk from the tree trunk attachment point to the ant.
+frame3, tagging the prey: this is the moment where the spider attaches the silk line to the ant prey.
+frame4, free fall defense.
+frame5, the spider re-settles on the trunk's surface
+
+
+### Summary: elapsed time
+
+
+```{r message=FALSE, warning=FALSE}
+videos_page1 <- read_excel("./Data/velocity_5seq_20200219a.xlsx", col_names = T, 
+sheet = "velocity_5seq_20200219", range = "A1:AB23")%>% 
+  rename("filename" = "f-name") %>% 
+  mutate(filename = str_replace(filename, ".$", "")) %>% 
+  rename("contact" = Seq3...15) %>%
+  mutate(firstMoveFrame = frame1 - posFile_start)
+# View(videos_page1)
+# current A1:AB23
+# alternative range: A1:J23
+# videos_page1 %>% View()
+
+orientation <- read_csv(file = "./Data/orientation.csv") %>% 
+  mutate(name = str_replace(name, ".$", "")) %>% 
+  rename(filename = "name")
+
+videos_page1 <- left_join(videos_page1, orientation,
+                        by = "filename")
+```
+
+
+
+Elapsed time between the critical stages during the ant-slayers' strike.
+Average elapsed time and SEM (standard error of the mean) included in the high speed frames shown in Figure 1-B.
+
+
+```{r}
+# Videos were recorded at 250 frames per second, thus each frame is equal to 0.004 seconds or 4 milliseconds.
+
+elapsed_time_sequences <- videos_page1 %>% 
+  select(1, 5:10) %>% 
+  # slice(- c(3)) %>% 
+  mutate(
+    # frames are multiply by 0.004 to scale as seconds
+    seq_1_2 = (frame2-frame1)*0.004,
+    seq_2_3 = (frame3-frame1)*0.004,
+    seq_3_4 = (frame4-frame1)*0.004,
+    seq_4_5 = (frame5-frame1)*0.004)
+
+
+```
+
+
+
+```{r}
+elapsed_time_sequences %>% 
+  summarise(Mean_1_2 = mean(seq_1_2),
+            SEM_1_2 = std.error(seq_1_2),
+            Mean_2_3 = mean(seq_2_3),
+            SEM_2_3 = std.error(seq_2_3),
+            Mean_3_4 = mean(seq_3_4),
+            SEM_3_4 = std.error(seq_3_4),
+            Mean_4_5 = mean(seq_4_5),
+            SEM_4_5 = std.error(seq_4_5)) %>%
+  kableExtra::kbl() %>% kable_styling(full_width = F, html_font = "Times")
+
+```
+
+<br>
+
+### View data
+```{r}
+
+elapsed_time_sequences %>% kableExtra::kbl() %>% kable_styling(full_width = F, html_font = "Times", c("striped", "hover"))
+
+```
+
+<br>
+
+### Processing of cartesian coordinates
+
+The individual data files for the video sequences are input in the order shown in the excel spread sheet by matching the file names. The scale recorded in the file names is also used to process the data prior to its analysis.
+
+```{r}
+# Grab the names of all the files in the working directory as set above
+
+all_pos <- list.files("./Data2", pattern =".pos", full.names = TRUE)
+
+# Grabs the names of the video files from the control spreadsheet
+# note the current directory only contains videos from the chronos camera
+input_list <- videos_page1 %>% 
+  select("filename") %>% 
+  pull()
+
+# input_list
+
+# creates a single object to be used as a pattern to grab the pos files that match those in the spreadsheet
+pattern <- paste(input_list, sep="", collapse="|")
+
+# list of pos files that match names in the spreadsheets
+chosen_pos <- all_pos[grepl(pattern, all_pos)]
+```
+
+
+
+```{r}
+# first containers --------------------------------------------------------
+
+# coord_files <- chosen_pos %>% 
+  # str_subset(pattern = "-(\\d){2}.pos$")
+
+coord_files <- chosen_pos %>% 
+  str_subset(pattern = "(\\d|\\d_fail)\\.pos$")
+
+# scale_files <- chosen_pos %>% 
+  # str_subset(pattern = "_(\\d){2}mm.pos$")
+
+scale_files <- chosen_pos %>% 
+  str_subset(pattern = "(\\d){1,}_scale_(\\d){1,}(mm)|(\\d){1,}_fail_scale_(\\d){1,}(mm)\\.pos$")
+
+# extract the known distances from the the names of the scale files
+the_scales <- scale_files %>% 
+  as.data.frame() %>% 
+  rename("scaleFiles" = ".") %>% 
+  mutate(scaleValues =  str_extract(scaleFiles, pattern = "_(\\d){1,2}mm")) %>% 
+  mutate(scaleValues =  str_extract(string = scaleValues, pattern = "_\\d+")) %>% 
+  mutate(scaleValues = str_replace(scaleValues, pattern = "_", replacement = "0.0")) %>% 
+  mutate(scaleValues = as.numeric(scaleValues))
+```
+
+<br>
+
+## Assessing attack speed {.tabset .tabset-fade .tabset-pills}
+
+### Trajectories from videos 
+
+
+We used the R package "Trajr" to generate the trajectories (the path of the moving spiders over time) followed by the spiders during the duration of the attack strike against the ant prey.
+
+Each trajectory was smoothed by applying a Savitzky-Golay to reduce high frequency noise while preserving the shape of the trajectory (function: TrajSmoothSG).
+Further, we used the TrajDerivatives function to calculate change in speed along a each trajectory.
+The outcome is stored in a "derivatives" object.
+
+This data is used in conjunction with the visually scored onset of the attack stages to calculate the maximum speed reached by the spiders during their somersault maneuvers.
+
+Trajr:
+
+McLean DJ, Skowron Volponi MA.
+trajr: An R package for characterisation of animal trajectories.
+Ethology.
+2018;00:1--9.
+<https://doi.org/10.1111/eth.12739.>
+
+<https://cran.rstudio.com/web/packages/trajr/vignettes/trajr-vignette.html>
+
+<br>
+
+### Cartesian coordinates to speed data
+
+**Steps to prepare the cartesian data for speed analysis.**
+
+Trajectories are created and stored in the list object "all_trajs" (22).
+Each one is name sequentially and corresponding to the file order in the data frame videos_page1.
+
+```{r echo=TRUE}
+# this line creates a list containing all the elements to create each trajectory object
+trajs_list <- list(coords = coord_files, scales = scale_files, scaleValues = the_scales)
+
+all_trajs <- map(pluck(trajs_list, 1) %>% seq_along() ,~ trajs_list %>% loadSample_FromList(.x)) %>% 
+  set_names(mylabelseq("Traj_", 1, 22, 1))
+
+# all_trajs %>% glimpse()
+```
+
+
+Create derivatives objects. Each derivative object contains the calculated speed and change in speed along each trajectory. These are stored in the list object: derivs_list
+
+
+```{r echo=TRUE}
+derivs_list <- pmap(list(coord_files, scale_files, the_scales$scaleValues), loadSample_FromList2) %>% 
+  # smoothing parameters passed to TrajSmootSG junction
+  map(TrajSmoothSG, p = 5, n = 23) %>% 
+  map(TrajDerivatives) %>% 
+  # each derivatives object is labelled sequentially with the prefix: Derivs
+  set_names(mylabelseq("Derivs_", 1, 22, 1))
+
+derivs_names <- names(derivs_list)
+```
+
+Frames 1 to 5 indicate the start of each stage during the strike phase of the ant slayer's attack.
+The first move (attack onset) is recorded as "frame1".
+To match the frame number at which the attack onset occurs with its index position, the values in "posFile_start" should be subtracted from the frame numbers.
+
+```{r echo=TRUE}
+first_move <- as.vector(videos_page1$frame1 - videos_page1$posFile_start)
+```
+
+The first move frame is used to control for any spider movement before the spider started the attack sequence.
+
+```{r echo=TRUE}
+derivs_list_0 <- derivs_list
+for(i in 1:length(derivs_list_0)) {
+  derivs_list_0[[i]]$speed[c(1:first_move[i]-1)] <- 0
+}
+
+```
+
+
+
+```{r echo=TRUE}
+
+# Trimming of video the end part of video 03
+# The last frames in the 3rd video are trimmed here to correct for a mistakenly scored positions
+
+# Trims the derivatives
+for(i in 1:length(derivs_list_0$Derivs_03)) {
+  derivs_list_0$Derivs_03[[i]] <- 
+    derivs_list_0$Derivs_03[[i]][c(1:120)]
+}
+
+# Trims the trajectory
+all_trajs$Traj_03 <- 
+  all_trajs$Traj_03[1:120, ]
+
+```
+
+
+<br>
+
+
+### Peak speed frame indexes
+
+Here we calculated the peak speed reached by spiders within a defined time window that covers the strike phase.
+The result is the index position where the peak speed was reached.
+Then this frame index can be used to access the time and speed at that moment (see below).
+
+```{r echo=TRUE}
+# The "IndexLimitsManual" function pulls the index position of the following frame index position:
+# frame where the acrobatic strike reaches its maximum speed
+
+# default values used for the function
+# IndexLimitsManual(derivs_object = derivs_list_sample$Derivs_01, startThreshold = 1e-8, thresholdFrame = 1, limit_range = 155, window_size = 35)
+
+indexes_0 <- map(derivs_list_0, IndexLimitsManual) %>% map(~ pluck(., 3) %>% first())
+# change name to remove short
+
+```
+
+<br>
+
+
+## Speed & Trajectory
+
+These plots show the speed change during the first phase of the attack (acrobatic strike) and the trajectory followed.
+
+The blue asterisk marks the onset of the spiders' attack (the spider begins moving).
+The red asterisk shows where the peak speed was reached during the acrobatic strike.
+Note this is restricted to the speeds achieved by the spiders **while** directing its attack to the ant prey and **before** dropping off from the trunk surface.
+
+```{r}
+
+par(mfrow = c(2,1))
+for(i in 1:length(all_trajs)) {
+  onset_to_peak_speed <- 
+    c(c(first_move[i]-1), indexes_0[[i]])
+  
+  par(mfrow = c(1,2)); 
+  derivs_list_0[[i]] %>% plotSpeed(); 
+  points(
+    derivs_list_0[[i]]$speed[onset_to_peak_speed] ~
+      derivs_list_0[[i]]$speedTimes[onset_to_peak_speed],
+    pch = 8, col = c("blue", "red"))
+  
+  plot(all_trajs[[i]], lwd = 1, lty = 1)
+  points(all_trajs[[i]][onset_to_peak_speed, ], pch = 8,col = c("blue", "red"))
+  title(main = names(all_trajs[i]), outer = T, line = -2)
+}
+
+```
+
+<br>
+
+## Speed curves + elapsed time boxplot {.tabset .tabset-fade .tabset-pills}
+
+**Figure 1 Panel F**
+
+The figure plots the speed change from the last frame before the acrobatic attack onset to the maximum speed reached for the 22 inspected high speed videos.
+
+
+```{r message=FALSE, warning=FALSE}
+# loop me up!
+# colour palette
+cbp1 <- rev(c("#F0E442", "#999999", "#E69F00", "#56B4E9", "#009E73",
+          "#0072B2", "#D55E00", "#CC79A7"))
+# to recycle colours
+cbp1_24 <- rep(cbp1, 3)
+
+mp <- ggplot()
+for(i in seq_along(derivs_list_0)) {
+  
+  onset_to_peak_speed <- c(first_move[i]-1):indexes_0[[i]]
+  
+  idata <- tibble("speed" = derivs_list_0[[i]]$speed[onset_to_peak_speed]) %>% 
+    mutate("index" = seq(1,length(speed), 1)-1)
+  
+  mp <- mp + geom_line(data = idata, 
+                       aes(x = index, y = speed*100), colour = cbp1_24[i]) +
+    geom_point(data = idata,
+               aes(x = last(index), 
+                   y =  last(speed*100)), 
+               colour = cbp1_24[i]) +
+    expand_limits(x = c(0, 30), y = c(0, 65)) +
+    ylab("Speed (cm/s)") +
+    xlab("Time (ms)") +
+    theme_classic() +
+    theme(panel.border = element_blank()) +
+    scale_x_continuous(labels=function(x)x*4, n.breaks = 6)
+}
+
+# print(mp)
+```
+
+
+
+```{r}
+# Max speeds for each spider and the elapsed time while going from 0 to to max.
+
+table_speed_duration <- 
+  map_dfr(derivs_list_0, SpeedAndTime2) %>% 
+  mutate(from  = derivs_names, .before = max_speed) 
+
+
+```
+
+
+
+```{r eval=FALSE, include=FALSE}
+# This code shows how the peak speeds and elapsed time were calculated inside the function "SpeedAndTime2"
+
+max_speeds_short <- pmap_dbl(list(derivs_list_0, indexes_0), 
+                             ~..1$speed[..2]*100
+)
+
+
+durations <- pmap_dbl(list(derivs_list_0, indexes_0, first_move), 
+                      ~(..1$speedTimes[..2] - 
+                          ..1$speedTimes[c(..3[1]-1)])*1000
+)
+
+```
+
+
+
+
+```{r}
+
+# Inset box plot for elapsed time during speed change included in figure 1 panel f
+
+
+# creates boxplot for elapsed time from 0 to peak
+inset2 <- table_speed_duration %>%
+  ggplot() +
+  geom_boxplot(aes(elapsed_time)) +
+  scale_x_continuous(n.breaks = 4) +
+  expand_limits(x = c(0, 120))
+
+# removes elements from the boxplot to make it an inset in the speed curves panel
+inset2 <- inset2 +
+theme( legend.position = "none",
+       panel.grid = element_blank(),
+       panel.background = element_rect(fill = "transparent",colour = NA),
+       plot.background = element_rect(fill = "transparent",colour = NA),
+       axis.title = element_blank(),
+       axis.text = element_blank(),
+       axis.ticks = element_blank(),
+       # panel.background = element_blank(),
+  )
+```
+
+
+### Plot
+
+```{r}
+ggp_combi2 <- inset2 / mp +
+  plot_layout(heights = c(.25, 4))
+ggp_combi2
+
+# ggsave(filename = "panelF3.pdf", plot = ggp_combi2, device = "pdf", path = "./gg_plots")
+```
+
+
+### Data tables
+
+Calculated peak speeds for each spider and the elapsed time while going from 0 to to max
+
+```{r}
+table_speed_duration %>% kableExtra::kbl() %>% kable_styling(full_width = F, html_font = "Times", c("striped", "hover"))
+```
+
+
+Means and SEM
+
+```{r}
+table_speed_duration %>% 
+  summarise(avg_speed = mean(max_speed),
+            SEM_speed = std.error(max_speed),
+            avg_duration = mean(elapsed_time),
+            SEM_duration = std.error(elapsed_time)) %>% kableExtra::kbl() %>% kable_styling(full_width = F, html_font = "Times", c("striped", "hover"))
+
+# round(mean(table_speed_duration$max_speed), 2)
+# round(mean(table_speed_duration$elapsed_time), 2)
+```
+
+Median and frequencies table for the elapsed time (ms)
+
+```{r}
+
+median(table_speed_duration$elapsed_time) 
+table(table_speed_duration$elapsed_time)
+
+```
+
+
+## Supplementary
+
+We explored the effect of spider size and orientation of the attack (measured as the angle towards which the spider directed the somersault attack).
+
+### Size and orientation
+
+Model summary
+
+```{r}
+# creating dataset 
+
+size_speed_orientation <- bind_cols(
+  table_speed_duration,
+  videos_page1 %>% 
+    select(`spider size`, Orientation)
+)
+
+
+# the model GLM
+glm_size <- glm(max_speed ~ `spider size`, family = Gamma(link = "log"), 
+               data = size_speed_orientation # %>% filter(max_speeds_all < 60)
+)
+# Null model
+glm_null <- glm(max_speed ~ 1, family = Gamma(link = "log"), 
+                    data = size_speed_orientation)
+
+# summary
+summary(glm_size)
+```
+
+Explained deviance
+
+```{r}
+
+anova(glm_size, glm_null, test = "Chi")
+# no significant difference with the null model
+
+mod_dev <- round(100*(glm_size$null.deviance - glm_size$deviance)/glm_size$null.deviance, 2)
+
+mod_dev
+# 16.78 %
+
+```
+
+```{r eval=FALSE, include=FALSE}
+# summary table with additional method not used for this submission
+
+tab_model(glm_size, show.stat = T)
+
+# plot(profile(glm_size))
+
+# assessment of the model -non parametric test of fit
+# library(DHARMa)
+# res <- simulateResiduals(glm_size)
+# plotQQunif(res)
+# plotResiduals(res)
+
+```
+
+
+```{r}
+speed_size_plot <- size_speed_orientation %>% 
+  ggplot() +
+  geom_point(aes(x = `spider size`, y = max_speed)) +
+  stat_smooth(aes(x = `spider size`, y = max_speed), 
+              method = "glm", 
+              formula = y~I(1/x),
+              method.args = list(family = Gamma(link = "log")),
+              se = T) +
+  labs(x = "Spider body length (mm)", y = "Peak speed cm/s") +
+  theme_classic()
+# speed_size_plot
+```
+
+
+### Orientation
+
+We tested the association between linear (maximum speed) and circular (attack orientation) variables with the Johnson–Wehrly–Mardia correlation coefficient (see chapter 8 in reference below). Where R2𝑥𝜃 ranges between zero and one. Values closer to one refer to stronger associations. Spiders did not exhibit any preference for the direction in which they attacked the prey
+
+Pewsey A, Neuhäuser M, Ruxton GD. Circular statistics in R. Oxford University Press; 2013.
+
+
+```{r}
+# converting degrees to radians
+withRad <- size_speed_orientation %>% 
+  mutate(OriRad2 = Orientation*2*pi/360)
+
+R2xtIndTestRand(withRad$max_speed, 
+                withRad$OriRad2, 9999)
+
+```
+
+```{r}
+direction_plot <- size_speed_orientation %>% 
+  ggplot() +
+  geom_point(aes(x = abs(Orientation), y = max_speed)) +
+  labs(x = "Attack direction (degrees)", y = "Peak speed cm/s") +
+  theme_classic()
+# direction_plot
+```
+
+### Supplementary plot
+
+```{r}
+speed_size_plot + direction_plot + plot_layout(ncol = 1)
+```
+
+
+
+```{r}
+# setwd("/Users/alfonsoaceves/Downloads/Ant Slayer Speed/gg_plots")
+# write_csv(speeds_times, "speeds_times.csv")
+```
+
+
+<br>
+
+::: {.tocify-extend-page data-unique="tocify-extend-page" style="height: 0;"}
+:::
