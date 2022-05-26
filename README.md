@@ -12,7 +12,6 @@ Corresponding author: Alfonso Aceves-Aparicio Correspondence: [bioarach\@gmail.c
 
 This is the code used to extract velocity data and generate figures from the attack sequences recorded as high speed video.
 Available:
-[![DOI](https://zenodo.org/badge/354425741.svg)](https://zenodo.org/badge/latestdoi/354425741)
 [![DOI](https://zenodo.org/badge/364744129.svg)](https://zenodo.org/badge/latestdoi/364744129)
 
 
