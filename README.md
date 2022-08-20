@@ -2,11 +2,15 @@
 
 **Authors:**
 
-Alfonso Aceves-Aparicio\*^1, 2^, Ajay Narendra^1^, Donald James McLean^1^, Elizabeth C. Lowe^1^, Marcelo Christian^2^, Jonas O. Wolff^1^, Jutta M. Schneider^2^ and Marie E. Herberstein^1^
+Alfonso Aceves-Aparicio\*^1, 2, 3^, Ajay Narendra^1^, Donald James McLean^1^, Elizabeth C. Lowe^1^, Marcelo Christian^2^, Jonas O. Wolff^1, 4^, Jutta M. Schneider^2^ and Marie E. Herberstein^1^
 
 1, Department of Biological Sciences, Macquarie University, Sydney, NSW, 2109, Australia
 
 2, Institute of Zoology, Universität Hamburg, Hamburg, Germany   
+
+3, Max-Planck-Institut für Chemische Ökologie, Jena, Germany
+
+4, Zoological Institute and Museum, University of Greifswald, Germany
   
 Corresponding author: Alfonso Aceves-Aparicio Correspondence: [bioarach\@gmail.com](mailto:bioarach@gmail.com)
 
